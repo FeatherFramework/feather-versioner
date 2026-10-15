@@ -9,6 +9,7 @@ end
 
 function VersionerSanitize.Text(value, maximum)
     value = tostring(value or '')
+    value = value:gsub('\27%[[0-?]*[ -/]*[@-~]', '')
     value = value:gsub('[%z\1-\31\127]', ' ')
     value = value:gsub('%^%d', '')
     value = value:gsub('%s+', ' '):match('^%s*(.-)%s*$') or ''
@@ -30,6 +31,11 @@ function VersionerSanitize.ReleaseUrl(value, repository)
     if type(value) ~= 'string' or #value > 512 then return nil end
     local prefix = ('https://github.com/%s/releases/'):format(repository)
     if value:sub(1, #prefix):lower() ~= prefix:lower() then return nil end
-    if value:find('[%c%s%?%#]') then return nil end
+    if value:find('[%c%s%?%#\\]') then return nil end
+    local path = value:sub(#prefix + 1)
+    if not path:match('^tag/.+') then return nil end
+    for segment in path:gmatch('[^/]+') do
+        if segment == '.' or segment == '..' then return nil end
+    end
     return value
 end

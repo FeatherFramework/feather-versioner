@@ -53,7 +53,13 @@ function VersionerSemver.Parse(value)
             identifiers[#identifiers + 1] = identifier
         end
     end
-    if build and (build == '' or not build:match('^[0-9A-Za-z.-]+$')) then return VersionerResults.Err('invalid_version', 'Build metadata is invalid.') end
+    if build then
+        for _, identifier in ipairs(splitDots(build)) do
+            if identifier == '' or not identifier:match('^[0-9A-Za-z-]+$') then
+                return VersionerResults.Err('invalid_version', 'Build metadata is invalid.')
+            end
+        end
+    end
     local normalized = table.concat({ major, minor, patch }, '.')
     if #identifiers > 0 then normalized = normalized .. '-' .. table.concat(identifiers, '.') end
     if build then normalized = normalized .. '+' .. build end

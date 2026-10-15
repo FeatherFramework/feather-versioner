@@ -67,7 +67,12 @@ function VersionerReporter.Evaluate(entry, cache, stale)
 end
 
 function VersionerReporter.Error(entry, failure, staleCache)
-    if staleCache then entry.warning = failure; return VersionerReporter.Evaluate(entry, staleCache, true) end
+    if staleCache then
+        VersionerReporter.Evaluate(entry, staleCache, true)
+        entry.warning = failure
+        return entry
+    end
+    entry.target, entry.upstream, entry.warning, entry.stale = nil, nil, nil, false
     entry.status, entry.error, entry.checkedAt = 'error', failure, os.time()
     return entry
 end
@@ -81,6 +86,14 @@ function VersionerReporter.PrintOne(entry)
     if Config.IncludeReleaseTitle and entry.target and entry.target.title and entry.target.title ~= '' then print(('  Title: %s'):format(entry.target.title)) end
     if entry.error then print(('  %s %s (%s)'):format(colorize('Reason:', colors.error), entry.error.message or 'Unknown error', entry.error.code or 'error')) end
     if entry.warning then print(('  %s %s (%s)'):format(colorize('Stale reason:', colors.ignored), entry.warning.message or 'Unknown error', entry.warning.code or 'error')) end
+    if Config.ReportNewerThanPin and entry.policy.pin and entry.upstream then
+        local compared = VersionerSemver.Compare(entry.upstream.version, entry.policy.pin)
+        if compared.ok and compared.value > 0 then
+            print(('  Upstream information: %s is newer than pin %s%s (pin remains target)'):format(
+                entry.upstream.version, entry.policy.pin.normalized, entry.stale and ' stale=true' or ''))
+            print(('  Upstream release: %s'):format(entry.upstream.url))
+        end
+    end
 end
 
 function VersionerReporter.Print(entries, requestedName)
@@ -100,5 +113,8 @@ function VersionerReporter.Print(entries, requestedName)
         }
         print(('%s %s %s'):format(prefix(), summary[1], table.concat(summary, ', ', 2)))
     end
-    for _, name in ipairs(names) do local entry=entries[name];if Config.ReportCurrent or entry.status ~= 'current' then VersionerReporter.PrintOne(entry) end end
+    for _, name in ipairs(names) do
+        local entry = entries[name]
+        if Config.ReportCurrent or entry.status ~= 'current' or entry.warning then VersionerReporter.PrintOne(entry) end
+    end
 end

@@ -21,6 +21,7 @@ local function failRepository(repository, failure)
 end
 
 function VersionerScheduler.Run(reason, callback)
+    if Config.Enabled ~= true then return VersionerResults.Err('disabled', 'Versioner is disabled by operator configuration.') end
     if VersionerScheduler.stopped then return VersionerResults.Err('stopped', 'Versioner is stopping.') end
     if VersionerScheduler.running then return VersionerResults.Err('in_flight', 'A version check is already running.') end
     VersionerScheduler.running = true
@@ -63,7 +64,10 @@ function VersionerScheduler.Run(reason, callback)
                     local failures = (VersionerScheduler.failures[repository.key] or 0) + 1
                     VersionerScheduler.failures[repository.key] = failures
                     local delay = math.min(Config.MaxBackoffMinutes * 60, 30 * (2 ^ math.min(failures - 1, 10)))
-                    if result.code == 'rate_limited' and result.details and tonumber(result.details.reset) then delay = math.max(delay, tonumber(result.details.reset) - os.time()) end
+                    local reset = result.details and tonumber(result.details.reset)
+                    if result.code == 'rate_limited' and reset and reset == reset and reset < math.huge then
+                        delay = math.min(Config.MaxBackoffMinutes * 60, math.max(delay, reset - os.time()))
+                    end
                     VersionerScheduler.nextAllowedAt[repository.key] = os.time() + math.max(1, delay)
                     failRepository(repository, result)
                 end
@@ -77,6 +81,7 @@ function VersionerScheduler.Run(reason, callback)
 end
 
 function VersionerScheduler.Manual(callback)
+    if Config.Enabled ~= true then return VersionerResults.Err('disabled', 'Versioner is disabled by operator configuration.') end
     local now = os.time()
     if now - VersionerScheduler.lastManualAt < Config.ManualRefreshCooldownSeconds then
         return VersionerResults.Err('cooldown', 'Manual refresh is cooling down.', { remaining = Config.ManualRefreshCooldownSeconds - (now - VersionerScheduler.lastManualAt) })
@@ -103,5 +108,8 @@ function VersionerScheduler.Stop()
     VersionerScheduler.stopped = true
     VersionerScheduler.generation = VersionerScheduler.generation + 1
     VersionerScheduler.running = false
-    if VersionerCache.dirty then VersionerCache.Save() end
+    if VersionerCache.dirty then
+        local saved = VersionerCache.Save()
+        if not saved.ok then print(('[feather-versioner] cache warning on stop: %s'):format(saved.message)) end
+    end
 end

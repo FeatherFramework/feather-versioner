@@ -9,6 +9,12 @@ local function decodeReleases(body, repository)
     if type(body) ~= 'string' or #body > Config.MaxResponseBytes then return VersionerResults.Err('response_too_large', 'GitHub response exceeds its size limit.') end
     local ok, decoded = pcall(json.decode, body)
     if not ok or type(decoded) ~= 'table' then return VersionerResults.Err('invalid_response', 'GitHub returned malformed JSON.') end
+    local count = 0
+    for key in pairs(decoded) do
+        if type(key) ~= 'number' or key < 1 or key % 1 ~= 0 then return VersionerResults.Err('invalid_response', 'GitHub releases must be a list.') end
+        count = count + 1
+    end
+    if count ~= #decoded then return VersionerResults.Err('invalid_response', 'GitHub releases must be a dense list.') end
     local releases = {}
     for index = 1, math.min(#decoded, Config.MaxReleases) do
         local source = decoded[index]
@@ -30,6 +36,10 @@ end
 VersionerGithub.DecodeFixture = decodeReleases
 
 function VersionerGithub.Fetch(repositoryRecord, generation, callback)
+    local function active()
+        return Config.Enabled == true and not VersionerScheduler.stopped and generation == VersionerScheduler.generation
+    end
+    if not active() then return nil end
     VersionerGithub.sequence = VersionerGithub.sequence + 1
     local requestId = VersionerGithub.sequence
     local cached = VersionerCache.Get(repositoryRecord.key)
@@ -37,13 +47,13 @@ function VersionerGithub.Fetch(repositoryRecord, generation, callback)
     if cached and type(cached.etag) == 'string' and cached.etag ~= '' then headers['If-None-Match'] = cached.etag end
     local completed = false
     SetTimeout(math.floor(Config.ResponseDeadlineSeconds * 1000), function()
-        if completed then return end
+        if completed or not active() then return end
         completed = true
         callback(VersionerResults.Err('deadline_exceeded', 'GitHub response deadline expired.', { requestId = requestId, generation = generation }))
     end)
     local url = ('https://api.github.com/repos/%s/releases?per_page=%d'):format(repositoryRecord.repository, Config.MaxReleases)
     PerformHttpRequest(url, function(status, body, responseHeaders, errorData)
-        if completed then return end
+        if completed or not active() then return end
         completed = true
         status = tonumber(status) or 0
         if status == 304 and cached then

@@ -71,6 +71,37 @@ RegisterCommand('VersionerFixtureSmokeTest', function(source)
     })
 end, true)
 
+RegisterCommand('VersionerCacheAcceptanceSmokeTest', function(source)
+    if source ~= 0 then return end
+    -- Read only fixed, local source paths. Tested modules get mocked filesystem,
+    -- HTTP, timers and metadata; only the real JSON codec crosses the boundary.
+    local allowed = { ['tests/harness.lua'] = true, ['tests/cache_acceptance.lua'] = true,
+        ['config.lua'] = true, ['shared/results.lua'] = true }
+    for _, name in ipairs({ 'sanitize', 'semver', 'config', 'registry', 'cache', 'github', 'reporter', 'scheduler', 'commands' }) do
+        allowed['server/' .. name .. '.lua'] = true
+    end
+    local env = { assert = assert, error = error, ipairs = ipairs, pairs = pairs, next = next,
+        pcall = pcall, tonumber = tonumber, tostring = tostring, type = type, select = select,
+        rawget = rawget, math = math, string = string, table = table, coroutine = coroutine }
+    env.loadfile = function(path, mode, target)
+        assert(allowed[path], 'Unexpected acceptance source path')
+        local raw = LoadResourceFile(resourceName, path)
+        assert(type(raw) == 'string', 'Acceptance source missing; include tests in the resource package')
+        return load(raw, '@' .. path, 't', target or env)
+    end
+    local ok, results = pcall(function()
+        local harness = assert(env.loadfile('tests/harness.lua'))()
+        local run = assert(env.loadfile('tests/cache_acceptance.lua'))()
+        return run(harness, { encode = json.encode, decode = json.decode })
+    end)
+    if not ok then
+        print('[VersionerCacheAcceptanceSmokeTest] FAIL: acceptance sources could not be loaded; include tests in the resource package')
+        return
+    end
+    print('[VersionerCacheAcceptanceSmokeTest] real JSON; in-memory filesystem; no HTTP or deployed-cache writes')
+    printTests('VersionerCacheAcceptanceSmokeTest', results)
+end, true)
+
 CreateThread(function()
     local validated = VersionerConfig.Validate()
     if not validated.ok then print(('[feather-versioner] startup disabled: %s (%s)'):format(validated.message, validated.code)); return end

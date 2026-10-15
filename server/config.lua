@@ -9,22 +9,29 @@ local numericLimits = {
 
 local function validateNumber(name)
     local bounds, value = numericLimits[name], tonumber(Config[name])
-    if not value or value < bounds[1] or value > bounds[2] then
-        return VersionerResults.Err('invalid_config', ('Config.%s must be between %s and %s.'):format(name, bounds[1], bounds[2]))
+    if not value or value ~= value or value % 1 ~= 0 or value < bounds[1] or value > bounds[2] then
+        return VersionerResults.Err('invalid_config', ('Config.%s must be a finite integer between %s and %s.'):format(name, bounds[1], bounds[2]))
     end
     Config[name] = value
     return VersionerResults.Ok(value)
 end
 
 function VersionerConfig.Validate()
+    if type(Config.AllowedOwners) ~= 'table' or type(Config.Resources) ~= 'table' then
+        return VersionerResults.Err('invalid_config', 'AllowedOwners and Resources must be tables.')
+    end
+    for _, name in ipairs({ 'Enabled', 'CheckOnStart', 'ReportCurrent', 'ReportSummary', 'ConsoleColors',
+        'IncludeReleaseTitle', 'ReportNewerThanPin', 'AllowManifestDiscovery' }) do
+        if type(Config[name]) ~= 'boolean' then return VersionerResults.Err('invalid_config', ('Config.%s must be boolean.'):format(name)) end
+    end
     for name in pairs(numericLimits) do local result = validateNumber(name); if not result.ok then return result end end
-    if type(Config.CacheFile) ~= 'string' or not Config.CacheFile:match('^[A-Za-z0-9_.-]+$') or #Config.CacheFile > 80 then
+    if type(Config.CacheFile) ~= 'string' or not Config.CacheFile:match('^[A-Za-z0-9_][A-Za-z0-9_.-]*$') or #Config.CacheFile > 80 then
         return VersionerResults.Err('invalid_config', 'Config.CacheFile must be a local filename.')
     end
     if Config.AllowManifestDiscovery == true then return VersionerResults.Err('unsupported_config', 'Manifest discovery is reserved for a later contract and must remain disabled.') end
     VersionerConfig.owners = {}
     for _, owner in ipairs(type(Config.AllowedOwners) == 'table' and Config.AllowedOwners or {}) do
-        if type(owner) ~= 'string' or not owner:match('^[A-Za-z0-9_.-]+$') then return VersionerResults.Err('invalid_config', 'AllowedOwners contains an invalid owner.') end
+        if type(owner) ~= 'string' or #owner > 100 or not owner:match('^[A-Za-z0-9][A-Za-z0-9_.-]*$') then return VersionerResults.Err('invalid_config', 'AllowedOwners contains an invalid owner.') end
         VersionerConfig.owners[owner:lower()] = true
     end
     VersionerConfig.resources = {}
@@ -32,6 +39,7 @@ function VersionerConfig.Validate()
         if type(resourceName) ~= 'string' or not resourceName:match('^[A-Za-z0-9_.-]+$') or #resourceName > 100 or type(policy) ~= 'table' then
             return VersionerResults.Err('invalid_config', 'Configured resource identity or policy is invalid.')
         end
+        if policy.enabled ~= nil and type(policy.enabled) ~= 'boolean' then return VersionerResults.Err('invalid_config', 'Resource enabled must be boolean.') end
         if policy.enabled ~= false then
             local repository = VersionerSanitize.Repository(policy.repository)
             if not repository.ok then return VersionerResults.Err('invalid_config', repository.message, { resource = resourceName }) end
