@@ -1,5 +1,7 @@
 # Feather Versioner
 
+Version: **0.1.7**.
+
 Feather Versioner is an optional, server-only release notification service. It compares installed resource manifest versions with operator-selected GitHub release policies and prints concise console reports.
 
 It never downloads releases or overwrites, starts, stops, restarts, or migrates checked resources. GitHub availability never controls framework readiness, and Versioner does not replace runtime contract negotiation.
