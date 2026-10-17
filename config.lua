@@ -105,6 +105,22 @@ Config = {
             repository = 'FeatherFramework/feather-audit',
             channel = 'stable'
         },
+        ['feather-jobs'] = {
+            repository = 'FeatherFramework/feather-jobs',
+            channel = 'stable'
+        },
+        ['feather-assets'] = {
+            repository = 'FeatherFramework/feather-assets',
+            channel = 'stable'
+        },
+        ['feather-property'] = {
+            repository = 'FeatherFramework/feather-property',
+            channel = 'stable'
+        },
+        ['feather-contracts'] = {
+            repository = 'FeatherFramework/feather-contracts',
+            channel = 'stable'
+        },
         ['feather-versioner'] = {
             repository = 'FeatherFramework/feather-versioner',
             channel = 'stable'
